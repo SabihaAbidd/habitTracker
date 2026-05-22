@@ -4,8 +4,7 @@ A premium single-page habit tracker built for the Dev Weekends Fellowship 2026 a
 
 ## Live demo
 
-> **[https://habit-tracker-YOUR-NAME.vercel.app](https://habit-tracker-YOUR-NAME.vercel.app)**
-> *(replace with your Vercel URL after deploying)*
+> **[https://habit-tracker-YOUR-NAME.vercel.app](https://habit-tracker-olive-alpha.vercel.app/)**
 
 ---
 
