@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Plus, Trash2, Pencil, Check, ChevronLeft,
-  ChevronRight, RotateCcw, Sparkles
+  ChevronRight, RotateCcw, Sparkles, Zap
 } from 'lucide-react'
 
 // ─── Date Utilities ────────────────────────────────────────────────────────
@@ -12,35 +12,22 @@ function today() {
   d.setHours(0, 0, 0, 0)
   return d
 }
-
-function toKey(d) {
-  return d.toISOString().slice(0, 10)
-}
-
-function addDays(d, n) {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
-}
-
+function toKey(d) { return d.toISOString().slice(0, 10) }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 function getMondayOf(d) {
-  const r = new Date(d)
-  r.setHours(0, 0, 0, 0)
-  const dow = r.getDay() // 0=Sun
+  const r = new Date(d); r.setHours(0, 0, 0, 0)
+  const dow = r.getDay()
   r.setDate(r.getDate() - (dow === 0 ? 6 : dow - 1))
   return r
 }
-
 function getWeekDays(offsetWeeks) {
   const mon = addDays(getMondayOf(today()), offsetWeeks * 7)
   return Array.from({ length: 7 }, (_, i) => addDays(mon, i))
 }
-
 function formatWeekRange(days) {
   const a = days[0], b = days[6]
   const mo = d => d.toLocaleString('default', { month: 'short' })
-  if (a.getMonth() === b.getMonth())
-    return `${mo(a)} ${a.getDate()} – ${b.getDate()}`
+  if (a.getMonth() === b.getMonth()) return `${mo(a)} ${a.getDate()} – ${b.getDate()}`
   return `${mo(a)} ${a.getDate()} – ${mo(b)} ${b.getDate()}`
 }
 
@@ -49,18 +36,11 @@ const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // ─── Storage ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'streak_v1'
-
 function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw) } catch {}
   return { habits: [], completions: {} }
 }
-
-function saveState(state) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch {}
-}
+function saveState(s) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch {} }
 
 // ─── Streak Logic ──────────────────────────────────────────────────────────
 
@@ -68,81 +48,117 @@ function calcStreak(completions, habitId) {
   const c = completions[habitId] || {}
   const todayKey = toKey(today())
   let d = new Date(today())
-  // Grace: if today not checked, start counting from yesterday
   if (!c[todayKey]) d = addDays(d, -1)
   let streak = 0
   while (true) {
     const k = toKey(d)
-    if (c[k]) { streak++; d = addDays(d, -1) }
-    else break
-    if (streak > 3650) break // safety
+    if (c[k]) { streak++; d = addDays(d, -1) } else break
+    if (streak > 3650) break
   }
   return streak
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────
+// ─── Streak Badge ──────────────────────────────────────────────────────────
 
 function StreakBadge({ count }) {
-  if (count === 0) return (
-    <span className="flex items-center gap-1 text-xs text-muted px-2 py-0.5 rounded-full border border-border min-w-[46px] justify-center">
-      <Flame size={11} className="opacity-40" />
-      <span>0</span>
-    </span>
-  )
+  const isHot = count >= 7
+  if (count === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-muted px-2 py-0.5 rounded-full border border-white/5 bg-white/[0.02]">
+        <Flame size={10} className="opacity-40" />
+        <span className="tabular-nums">0</span>
+      </span>
+    )
+  }
   return (
     <motion.span
       key={count}
-      initial={{ scale: 0.8, opacity: 0 }}
+      initial={{ scale: 0.85, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full min-w-[46px] justify-center"
+      transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+      className="relative inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
       style={{
-        background: 'linear-gradient(135deg, rgba(255,184,106,0.15), rgba(255,138,76,0.1))',
-        border: '1px solid rgba(255,184,106,0.3)',
-        color: '#FFB86A',
+        background: 'linear-gradient(135deg, rgba(217,255,63,0.18), rgba(184,255,92,0.08))',
+        border: '1px solid rgba(217,255,63,0.35)',
+        color: '#D9FF3F',
+        boxShadow: isHot ? '0 0 14px rgba(217,255,63,0.35)' : '0 0 6px rgba(217,255,63,0.15)',
       }}
     >
-      <Flame size={11} />
-      <span>{count}</span>
+      <motion.span
+        animate={isHot ? { scale: [1, 1.15, 1] } : {}}
+        transition={{ repeat: Infinity, duration: 1.6 }}
+      >
+        <Flame size={10} fill="#D9FF3F" />
+      </motion.span>
+      <span className="tabular-nums">{count}</span>
     </motion.span>
   )
 }
 
+// ─── Check Cell ────────────────────────────────────────────────────────────
+
 function CheckCell({ checked, onToggle, isFuture, isToday, habitName, dateKey }) {
   return (
-    <div className={`flex items-center justify-center h-full ${isToday ? 'relative' : ''}`}>
-      <motion.button
-        whileHover={!isFuture ? { scale: 1.08 } : {}}
-        whileTap={!isFuture ? { scale: 0.92 } : {}}
-        onClick={!isFuture ? onToggle : undefined}
-        disabled={isFuture}
-        aria-label={`${checked ? 'Uncheck' : 'Check'} ${habitName} on ${dateKey}`}
-        aria-pressed={checked}
-        className={[
-          'focus-ring w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150',
-          isFuture
-            ? 'border border-border/30 cursor-not-allowed opacity-25'
-            : checked
-              ? 'border border-success/40 bg-success/10 cursor-pointer'
-              : 'border border-border hover:border-amber/50 hover:bg-elevated cursor-pointer',
-        ].join(' ')}
-      >
-        <AnimatePresence mode="wait">
-          {checked && (
-            <motion.div
-              key="check"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            >
-              <Check size={14} className="text-success" strokeWidth={2.5} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.button>
-    </div>
+    <motion.button
+      whileHover={!isFuture ? { scale: 1.12 } : {}}
+      whileTap={!isFuture ? { scale: 0.88 } : {}}
+      onClick={!isFuture ? onToggle : undefined}
+      disabled={isFuture}
+      aria-label={`${checked ? 'Uncheck' : 'Check'} ${habitName} on ${dateKey}`}
+      aria-pressed={checked}
+      className="focus-ring relative w-9 h-9 rounded-full flex items-center justify-center transition-colors duration-200"
+      style={{
+        cursor: isFuture ? 'not-allowed' : 'pointer',
+        opacity: isFuture ? 0.18 : 1,
+      }}
+    >
+      <span
+        className="absolute inset-0 rounded-full transition-all duration-300"
+        style={{
+          border: checked
+            ? '1.5px solid rgba(217,255,63,0.7)'
+            : `1.5px solid ${isToday ? 'rgba(217,255,63,0.35)' : 'rgba(255,255,255,0.12)'}`,
+          background: checked
+            ? 'radial-gradient(circle at 30% 30%, rgba(217,255,63,0.35), rgba(184,255,92,0.18) 60%, rgba(217,255,63,0.05))'
+            : 'transparent',
+          boxShadow: checked
+            ? '0 0 16px rgba(217,255,63,0.45), inset 0 0 8px rgba(217,255,63,0.25)'
+            : 'none',
+        }}
+      />
+      <AnimatePresence mode="wait">
+        {checked && (
+          <motion.span
+            key="check"
+            initial={{ scale: 0, opacity: 0, rotate: -45 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 520, damping: 22 }}
+            className="relative"
+          >
+            <Check size={14} strokeWidth={3} style={{ color: '#07090D' }} />
+            <span
+              className="absolute inset-0 rounded-full -z-10"
+              style={{ boxShadow: '0 0 10px rgba(217,255,63,0.6)' }}
+            />
+          </motion.span>
+        )}
+      </AnimatePresence>
+      {checked && (
+        <motion.span
+          aria-hidden
+          className="absolute inset-0 rounded-full"
+          initial={{ opacity: 0.6, scale: 1 }}
+          animate={{ opacity: 0, scale: 1.6 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          style={{ border: '1px solid rgba(217,255,63,0.5)' }}
+        />
+      )}
+    </motion.button>
   )
 }
+
+// ─── Habit Row ─────────────────────────────────────────────────────────────
 
 function HabitRow({ habit, completions, weekDays, todayKey, onToggle, onDelete, onRename, index }) {
   const [editing, setEditing] = useState(false)
@@ -164,136 +180,157 @@ function HabitRow({ habit, completions, weekDays, todayKey, onToggle, onDelete, 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8, transition: { duration: 0.18 } }}
-      transition={{ duration: 0.25, delay: index * 0.04 }}
-      className="group flex items-center border-b border-border/50 last:border-b-0 hover:bg-elevated/40 transition-colors duration-100"
-      style={{ minHeight: '56px' }}
+      exit={{ opacity: 0, y: -10, transition: { duration: 0.18 } }}
+      transition={{ duration: 0.35, delay: index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ y: -2 }}
+      className="group relative"
     >
-      {/* Habit name + streak */}
-      <div className="flex items-center gap-2 px-4 shrink-0" style={{ width: 220, minWidth: 180 }}>
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={editVal}
-            onChange={e => setEditVal(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitRename()
-              if (e.key === 'Escape') { setEditVal(habit.name); setEditing(false) }
-            }}
-            className="focus-ring flex-1 bg-elevated border border-amber/40 rounded-lg px-3 py-1.5 text-sm text-primary outline-none"
-            maxLength={60}
-          />
-        ) : (
-          <>
-            <span
-              className="text-sm text-primary truncate flex-1 font-medium leading-tight"
-              title={habit.name}
-            >
-              {habit.name}
-            </span>
-            {/* Actions — visible on row hover */}
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
-              <motion.button
-                whileTap={{ scale: 0.88 }}
-                onClick={() => { setEditVal(habit.name); setEditing(true) }}
-                aria-label={`Rename ${habit.name}`}
-                className="focus-ring w-6 h-6 flex items-center justify-center rounded-md text-muted hover:text-secondary hover:bg-elevated transition-colors"
-              >
-                <Pencil size={12} />
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.88 }}
-                onClick={() => onDelete(habit.id)}
-                aria-label={`Delete ${habit.name}`}
-                className="focus-ring w-6 h-6 flex items-center justify-center rounded-md text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-              >
-                <Trash2 size={12} />
-              </motion.button>
-            </div>
-          </>
-        )}
-      </div>
+      <div
+        className="relative flex items-center rounded-2xl px-4 sm:px-5 py-3 transition-all duration-300 glass hover:border-white/[0.10]"
+        style={{ minHeight: 64 }}
+      >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          style={{ boxShadow: '0 0 0 1px rgba(217,255,63,0.15), 0 14px 40px -10px rgba(217,255,63,0.15)' }}
+        />
 
-      {/* Streak badge */}
-      <div className="flex items-center justify-center shrink-0 px-2" style={{ width: 64 }}>
-        <StreakBadge count={streak} />
-      </div>
+        <div className="flex items-center gap-2.5 shrink-0 w-[210px] sm:w-[260px] min-w-[180px]">
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={editVal}
+              onChange={e => setEditVal(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitRename()
+                if (e.key === 'Escape') { setEditVal(habit.name); setEditing(false) }
+              }}
+              className="focus-ring flex-1 bg-white/5 border border-lime/40 rounded-xl px-3 py-1.5 text-sm text-primary outline-none"
+              maxLength={60}
+            />
+          ) : (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm sm:text-[15px] text-primary truncate font-medium tracking-tight" title={habit.name}>
+                    {habit.name}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <StreakBadge count={streak} />
+                </div>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0">
+                <motion.button
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => { setEditVal(habit.name); setEditing(true) }}
+                  aria-label={`Rename ${habit.name}`}
+                  className="focus-ring w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-lime hover:bg-white/5 transition-colors"
+                >
+                  <Pencil size={12} />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => onDelete(habit.id)}
+                  aria-label={`Delete ${habit.name}`}
+                  className="focus-ring w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                >
+                  <Trash2 size={12} />
+                </motion.button>
+              </div>
+            </>
+          )}
+        </div>
 
-      {/* 7 day cells */}
-      <div className="flex flex-1">
-        {weekDays.map((day, i) => {
-          const dk = toKey(day)
-          const isToday = dk === todayKey
-          const isFuture = day > today()
-          const checked = !!(completions[habit.id]?.[dk])
-          return (
-            <div
-              key={dk}
-              className={[
-                'flex items-center justify-center',
-                isToday
-                  ? 'relative'
-                  : '',
-              ].join(' ')}
-              style={{ flex: 1, minWidth: 40, height: 56 }}
-            >
-              {isToday && (
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(180deg, rgba(255,184,106,0.06) 0%, rgba(255,184,106,0.03) 100%)',
-                    borderLeft: '1px solid rgba(255,184,106,0.12)',
-                    borderRight: '1px solid rgba(255,184,106,0.12)',
-                  }}
+        <div className="flex flex-1 ml-2">
+          {weekDays.map((day) => {
+            const dk = toKey(day)
+            const isToday = dk === todayKey
+            const isFuture = day > today()
+            const checked = !!(completions[habit.id]?.[dk])
+            return (
+              <div
+                key={dk}
+                className="flex items-center justify-center"
+                style={{ flex: 1, minWidth: 44, height: 44 }}
+              >
+                <CheckCell
+                  checked={checked}
+                  onToggle={() => onToggle(habit.id, dk)}
+                  isFuture={isFuture}
+                  isToday={isToday}
+                  habitName={habit.name}
+                  dateKey={dk}
                 />
-              )}
-              <CheckCell
-                checked={checked}
-                onToggle={() => onToggle(habit.id, dk)}
-                isFuture={isFuture}
-                isToday={isToday}
-                habitName={habit.name}
-                dateKey={dk}
-              />
-            </div>
-          )
-        })}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </motion.div>
   )
 }
 
+// ─── Empty State ───────────────────────────────────────────────────────────
+
 function EmptyState() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.4 }}
-      className="flex flex-col items-center justify-center py-20 px-8 text-center"
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="relative flex flex-col items-center justify-center py-24 px-6 text-center overflow-hidden"
     >
+      <div
+        aria-hidden
+        className="absolute top-8 left-1/2 -translate-x-1/2 w-[420px] h-[420px] rounded-full ambient-pulse"
+        style={{
+          background: 'radial-gradient(circle, rgba(217,255,63,0.18) 0%, rgba(217,255,63,0) 60%)',
+          filter: 'blur(20px)',
+          pointerEvents: 'none',
+        }}
+      />
       <motion.div
-        animate={{ y: [0, -6, 0] }}
-        transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-        className="mb-6 w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{ background: 'linear-gradient(135deg, rgba(255,184,106,0.12), rgba(255,138,76,0.08))', border: '1px solid rgba(255,184,106,0.2)' }}
+        className="float-y relative mb-7 w-20 h-20 rounded-3xl flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(135deg, rgba(217,255,63,0.18), rgba(184,255,92,0.08))',
+          border: '1px solid rgba(217,255,63,0.35)',
+          boxShadow: '0 0 50px rgba(217,255,63,0.30), inset 0 1px 0 rgba(255,255,255,0.06)',
+        }}
       >
-        <Sparkles size={24} style={{ color: '#FFB86A' }} />
+        <Sparkles size={30} style={{ color: '#D9FF3F' }} />
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-3xl pulse-glow"
+          style={{ pointerEvents: 'none' }}
+        />
       </motion.div>
-      <h3 className="text-lg font-medium text-primary mb-2">No habits yet</h3>
-      <p className="text-sm text-muted max-w-xs leading-relaxed">
-        Add your first habit and start building momentum.
+
+      <h3 className="relative text-2xl sm:text-3xl font-semibold tracking-tight text-primary mb-3">
+        Build momentum.
+      </h3>
+      <p className="relative text-sm sm:text-[15px] text-muted max-w-sm leading-relaxed">
+        Small actions repeated daily become transformation.
+      </p>
+      <p className="relative text-xs text-muted/60 mt-4">
+        Add your first habit below to begin.
       </p>
     </motion.div>
   )
 }
 
+// ─── Add Habit Form ────────────────────────────────────────────────────────
+
 function AddHabitForm({ onAdd, existingNames }) {
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
+  const [focused, setFocused] = useState(false)
   const inputRef = useRef(null)
 
   function handleSubmit() {
@@ -307,44 +344,121 @@ function AddHabitForm({ onAdd, existingNames }) {
   }
 
   return (
-    <div className="px-4 py-4 border-t border-border/50">
-      <div className="flex gap-2 items-center">
-        <div className="flex-1 relative">
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={e => { setValue(e.target.value); if (error) setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            placeholder="Add a habit — e.g. Read 30 min, Exercise…"
-            maxLength={60}
-            className="focus-ring w-full bg-elevated border border-border rounded-xl px-4 py-2.5 text-sm text-primary placeholder:text-muted outline-none transition-colors focus:border-amber/50"
-            aria-label="New habit name"
-          />
-        </div>
+    <div className="mt-6">
+      <motion.div
+        animate={{
+          boxShadow: focused
+            ? '0 0 0 1px rgba(217,255,63,0.55), 0 0 40px -8px rgba(217,255,63,0.45)'
+            : '0 0 0 1px rgba(255,255,255,0.06)',
+        }}
+        transition={{ duration: 0.25 }}
+        className="flex gap-2 items-center rounded-full p-1.5 glass"
+      >
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={e => { setValue(e.target.value); if (error) setError('') }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          placeholder="Add a habit — Read 30 min, Train, Meditate…"
+          maxLength={60}
+          className="focus:outline-none flex-1 bg-transparent px-4 py-2.5 text-sm text-primary placeholder:text-muted/80"
+          aria-label="New habit name"
+        />
         <motion.button
-          whileHover={{ scale: 1.03 }}
+          whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.96 }}
           onClick={handleSubmit}
-          className="focus-ring flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-bg transition-all duration-150 shrink-0"
-          style={{ background: 'linear-gradient(135deg, #FFB86A, #FF8A4C)' }}
+          className="focus-ring flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-semibold shrink-0 transition-all"
+          style={{
+            background: 'linear-gradient(135deg, #D9FF3F 0%, #B8FF5C 100%)',
+            color: '#07090D',
+            boxShadow: '0 0 24px rgba(217,255,63,0.45), inset 0 1px 0 rgba(255,255,255,0.4)',
+          }}
           aria-label="Add habit"
         >
-          <Plus size={15} strokeWidth={2.5} />
-          <span>Add</span>
+          <Plus size={15} strokeWidth={3} />
+          <span className="hidden sm:inline">Add</span>
         </motion.button>
-      </div>
+      </motion.div>
       <AnimatePresence>
         {error && (
           <motion.p
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="text-xs text-danger mt-2 px-1"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="text-xs text-danger mt-2 px-3"
           >
             {error}
           </motion.p>
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Week Header (day pills) ───────────────────────────────────────────────
+
+function WeekHeader({ weekDays, todayKey }) {
+  return (
+    <div className="flex items-center px-4 sm:px-5 mb-2">
+      <div className="shrink-0 w-[210px] sm:w-[260px] min-w-[180px]">
+        <span className="text-[10px] font-medium text-muted/70 uppercase tracking-[0.18em]">Habit</span>
+      </div>
+      <div className="flex flex-1 ml-2">
+        {weekDays.map((day, i) => {
+          const dk = toKey(day)
+          const isToday = dk === todayKey
+          const isFuture = day > today()
+          return (
+            <div
+              key={dk}
+              className="relative flex flex-col items-center justify-center"
+              style={{ flex: 1, minWidth: 44 }}
+            >
+              <span
+                className="text-[10px] font-medium uppercase tracking-[0.18em] mb-1.5"
+                style={{
+                  color: isToday ? '#D9FF3F' : isFuture ? 'rgba(139,147,167,0.4)' : 'rgba(139,147,167,0.7)',
+                }}
+              >
+                {DAY_LABELS[i]}
+              </span>
+              <div className="relative">
+                {isToday && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-0 -m-2 rounded-full"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(217,255,63,0.45), transparent 70%)',
+                      filter: 'blur(8px)',
+                    }}
+                  />
+                )}
+                <div
+                  className="relative w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold tabular-nums"
+                  style={
+                    isToday
+                      ? {
+                          background: 'linear-gradient(135deg, #D9FF3F, #B8FF5C)',
+                          color: '#07090D',
+                          boxShadow: '0 0 14px rgba(217,255,63,0.55)',
+                        }
+                      : {
+                          color: isFuture ? 'rgba(139,147,167,0.4)' : '#C9D0DE',
+                          background: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }
+                  }
+                >
+                  {day.getDate()}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -358,7 +472,6 @@ export default function App() {
   const weekDays = getWeekDays(weekOffset)
   const isCurrent = weekOffset === 0
 
-  // persist on every change
   useEffect(() => { saveState(state) }, [state])
 
   const toggleCompletion = useCallback((habitId, dateKey) => {
@@ -398,203 +511,206 @@ export default function App() {
 
   const existingNames = state.habits.map(h => h.name.toLowerCase())
 
-  // week summary
-  const totalChecks = state.habits.reduce((acc, h) =>
-    acc + weekDays.filter(d => state.completions[h.id]?.[toKey(d)]).length, 0)
-  const possible = state.habits.length * weekDays.filter(d => d <= today()).length
-  const pct = possible > 0 ? Math.round(totalChecks / possible * 100) : 0
+  const { totalChecks, possible, pct, bestStreak } = useMemo(() => {
+    const totalChecks = state.habits.reduce((acc, h) =>
+      acc + weekDays.filter(d => state.completions[h.id]?.[toKey(d)]).length, 0)
+    const possible = state.habits.length * weekDays.filter(d => d <= today()).length
+    const pct = possible > 0 ? Math.round(totalChecks / possible * 100) : 0
+    const bestStreak = state.habits.length
+      ? Math.max(...state.habits.map(h => calcStreak(state.completions, h.id)))
+      : 0
+    return { totalChecks, possible, pct, bestStreak }
+  }, [state, weekDays])
 
   return (
-    <div className="min-h-screen bg-bg font-sans">
-      {/* Top nav */}
-      <header className="sticky top-0 z-20 border-b border-border/60 bg-bg/80 backdrop-blur-xl">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          {/* Logo */}
-          <h1 className="font-display text-xl font-normal italic tracking-tight shrink-0" style={{ color: '#FFB86A' }}>
-            streak<span className="not-italic font-medium" style={{ color: '#FF8A4C' }}>.</span>
-          </h1>
+    <div className="relative min-h-screen font-sans isolate">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[900px] rounded-full"
+        style={{
+          background: 'radial-gradient(circle, rgba(217,255,63,0.10) 0%, rgba(217,255,63,0) 60%)',
+          filter: 'blur(40px)',
+          zIndex: 0,
+        }}
+      />
 
-          {/* Week nav */}
-          <div className="flex items-center gap-2">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setWeekOffset(o => o - 1)}
-              aria-label="Previous week"
-              className="focus-ring w-8 h-8 flex items-center justify-center rounded-lg border border-border text-secondary hover:text-primary hover:border-border/80 hover:bg-elevated transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </motion.button>
+      <header className="sticky top-0 z-30 px-3 sm:px-6 pt-4 sm:pt-5">
+        <div className="max-w-5xl mx-auto">
+          <div className="glass-strong rounded-2xl px-3 sm:px-5 h-14 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="relative w-7 h-7 rounded-lg flex items-center justify-center"
+                   style={{
+                     background: 'linear-gradient(135deg, rgba(217,255,63,0.2), rgba(184,255,92,0.05))',
+                     border: '1px solid rgba(217,255,63,0.35)',
+                     boxShadow: '0 0 14px rgba(217,255,63,0.35)',
+                   }}>
+                <Zap size={14} fill="#D9FF3F" stroke="#D9FF3F" />
+              </div>
+              <h1 className="font-display text-xl italic tracking-tight leading-none">
+                <span className="text-primary">streak</span>
+                <span className="not-italic font-medium text-gradient-lime">.</span>
+              </h1>
+            </div>
 
-            <span className="text-sm font-medium text-primary min-w-[140px] text-center tabular-nums">
-              {formatWeekRange(weekDays)}
-            </span>
-
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setWeekOffset(o => o + 1)}
-              disabled={weekOffset >= 0}
-              aria-label="Next week"
-              className="focus-ring w-8 h-8 flex items-center justify-center rounded-lg border border-border text-secondary hover:text-primary hover:border-border/80 hover:bg-elevated transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronRight size={16} />
-            </motion.button>
-          </div>
-
-          {/* Back to today */}
-          <AnimatePresence>
-            {!isCurrent ? (
+            <div className="flex items-center gap-1 sm:gap-2">
               <motion.button
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 8 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setWeekOffset(0)}
-                className="focus-ring flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-secondary hover:text-primary hover:border-amber/30 hover:bg-elevated transition-colors shrink-0"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setWeekOffset(o => o - 1)}
+                aria-label="Previous week"
+                className="focus-ring w-8 h-8 flex items-center justify-center rounded-full text-secondary hover:text-lime transition-colors"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
               >
-                <RotateCcw size={12} />
-                <span className="hidden sm:inline">This week</span>
+                <ChevronLeft size={15} />
               </motion.button>
-            ) : (
-              <div style={{ width: 90 }} /> /* spacer to keep layout stable */
-            )}
-          </AnimatePresence>
+
+              <span className="text-[13px] sm:text-sm font-medium text-primary min-w-[120px] sm:min-w-[140px] text-center tabular-nums tracking-tight">
+                {formatWeekRange(weekDays)}
+              </span>
+
+              <motion.button
+                whileHover={!(weekOffset >= 0) ? { scale: 1.08 } : {}}
+                whileTap={!(weekOffset >= 0) ? { scale: 0.9 } : {}}
+                onClick={() => setWeekOffset(o => o + 1)}
+                disabled={weekOffset >= 0}
+                aria-label="Next week"
+                className="focus-ring w-8 h-8 flex items-center justify-center rounded-full text-secondary hover:text-lime transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <ChevronRight size={15} />
+              </motion.button>
+            </div>
+
+            <div className="shrink-0 w-[36px] sm:w-[110px] flex justify-end">
+              <AnimatePresence>
+                {!isCurrent && (
+                  <motion.button
+                    initial={{ opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setWeekOffset(0)}
+                    className="focus-ring flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors"
+                    style={{
+                      background: 'rgba(217,255,63,0.10)',
+                      border: '1px solid rgba(217,255,63,0.30)',
+                      color: '#D9FF3F',
+                    }}
+                  >
+                    <RotateCcw size={11} />
+                    <span className="hidden sm:inline">Today</span>
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+      <main className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 pt-8 sm:pt-12 pb-16">
 
-        {/* Summary row */}
-        {state.habits.length > 0 && (
+        <section className="mb-8 sm:mb-10 px-2">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-3 mb-5 flex-wrap"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
           >
-            <span className="text-xs text-muted font-medium uppercase tracking-wider">This week</span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs px-2.5 py-1 rounded-full border border-border text-secondary bg-card">
-                {totalChecks} check{totalChecks !== 1 ? 's' : ''}
-              </span>
-              {possible > 0 && (
-                <span className="text-xs px-2.5 py-1 rounded-full border border-border text-secondary bg-card">
-                  {pct}% completion
-                </span>
-              )}
-              {(() => {
-                const best = Math.max(...state.habits.map(h => calcStreak(state.completions, h.id)))
-                return best > 1 ? (
-                  <span
-                    className="text-xs px-2.5 py-1 rounded-full flex items-center gap-1"
-                    style={{ background: 'rgba(255,184,106,0.1)', border: '1px solid rgba(255,184,106,0.25)', color: '#FFB86A' }}
-                  >
-                    <Flame size={11} /> {best}-day streak
-                  </span>
-                ) : null
-              })()}
-            </div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-muted/80 mb-2">
+              {isCurrent ? 'This week' : 'Reviewing'}
+            </p>
+            <h2 className="font-display text-3xl sm:text-5xl leading-tight tracking-tight text-primary">
+              Stay <span className="italic text-gradient-lime">consistent</span>,
+              <br className="hidden sm:block" /> compound the gains.
+            </h2>
           </motion.div>
-        )}
 
-        {/* Grid card */}
-        <div
-          className="rounded-2xl border border-border overflow-hidden"
-          style={{ background: '#17181C' }}
-        >
-          {/* Scrollable wrapper for mobile */}
-          <div className="overflow-x-auto">
-            <div style={{ minWidth: 560 }}>
+          {state.habits.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.5 }}
+              className="mt-6 flex items-center gap-2 sm:gap-3 flex-wrap"
+            >
+              <StatPill label="Checks" value={totalChecks} />
+              {possible > 0 && (
+                <StatPill label="Completion" value={`${pct}%`} accent={pct >= 70} />
+              )}
+              {bestStreak > 1 && (
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(217,255,63,0.18), rgba(184,255,92,0.06))',
+                    border: '1px solid rgba(217,255,63,0.35)',
+                    color: '#D9FF3F',
+                    boxShadow: '0 0 18px rgba(217,255,63,0.25)',
+                  }}
+                >
+                  <Flame size={12} fill="#D9FF3F" />
+                  <span className="tabular-nums">{bestStreak}-day best</span>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </section>
 
-              {/* Column headers */}
-              <div className="flex border-b border-border/60" style={{ background: '#1D1F24' }}>
-                {/* Name column header */}
-                <div className="flex items-center px-4 shrink-0" style={{ width: 220, minWidth: 180, height: 48 }}>
-                  <span className="text-xs font-medium text-muted uppercase tracking-wider">Habit</span>
-                </div>
-                {/* Streak column header */}
-                <div className="flex items-center justify-center shrink-0 px-2" style={{ width: 64, height: 48 }}>
-                  <span className="text-xs font-medium text-muted uppercase tracking-wider">Streak</span>
-                </div>
-                {/* Day headers */}
-                {weekDays.map((day, i) => {
-                  const dk = toKey(day)
-                  const isToday = dk === todayKey
-                  const isFuture = day > today()
-                  return (
-                    <div
-                      key={dk}
-                      className="flex flex-col items-center justify-center relative"
-                      style={{
-                        flex: 1,
-                        minWidth: 40,
-                        height: 48,
-                        ...(isToday ? {
-                          background: 'linear-gradient(180deg, rgba(255,184,106,0.08) 0%, rgba(255,184,106,0.04) 100%)',
-                          borderLeft: '1px solid rgba(255,184,106,0.14)',
-                          borderRight: '1px solid rgba(255,184,106,0.14)',
-                        } : {})
-                      }}
-                    >
-                      <span
-                        className={[
-                          'text-xs font-medium mb-0.5',
-                          isToday ? '' : isFuture ? 'text-muted/50' : 'text-muted'
-                        ].join(' ')}
-                        style={isToday ? { color: '#FFB86A' } : {}}
-                      >
-                        {DAY_LABELS[i]}
-                      </span>
-                      <div
-                        className={[
-                          'w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular-nums',
-                          isToday ? '' : isFuture ? 'text-muted/40' : 'text-secondary'
-                        ].join(' ')}
-                        style={isToday ? {
-                          background: 'linear-gradient(135deg, #FFB86A, #FF8A4C)',
-                          color: '#0F0F11',
-                          fontSize: '0.7rem',
-                        } : {}}
-                      >
-                        {day.getDate()}
-                      </div>
-                    </div>
-                  )
-                })}
+        <section className="relative">
+          <div className="overflow-x-auto no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+            <div style={{ minWidth: 620 }}>
+              <WeekHeader weekDays={weekDays} todayKey={todayKey} />
+
+              <div className="flex flex-col gap-2.5">
+                <AnimatePresence initial={false}>
+                  {state.habits.length === 0 ? (
+                    <EmptyState key="empty" />
+                  ) : (
+                    state.habits.map((habit, i) => (
+                      <HabitRow
+                        key={habit.id}
+                        habit={habit}
+                        completions={state.completions}
+                        weekDays={weekDays}
+                        todayKey={todayKey}
+                        onToggle={toggleCompletion}
+                        onDelete={deleteHabit}
+                        onRename={renameHabit}
+                        index={i}
+                      />
+                    ))
+                  )}
+                </AnimatePresence>
               </div>
 
-              {/* Habit rows */}
-              <AnimatePresence initial={false}>
-                {state.habits.length === 0 ? (
-                  <EmptyState key="empty" />
-                ) : (
-                  state.habits.map((habit, i) => (
-                    <HabitRow
-                      key={habit.id}
-                      habit={habit}
-                      completions={state.completions}
-                      weekDays={weekDays}
-                      todayKey={todayKey}
-                      onToggle={toggleCompletion}
-                      onDelete={deleteHabit}
-                      onRename={renameHabit}
-                      index={i}
-                    />
-                  ))
-                )}
-              </AnimatePresence>
-
-              {/* Add habit form */}
               <AddHabitForm onAdd={addHabit} existingNames={existingNames} />
-
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-muted/40 mt-8">
-          Data saved locally in your browser.
-        </p>
       </main>
+    </div>
+  )
+}
+
+function StatPill({ label, value, accent = false }) {
+  return (
+    <div
+      className="flex items-baseline gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        color: accent ? '#D9FF3F' : '#C9D0DE',
+      }}
+    >
+      <span className="font-semibold tabular-nums">{value}</span>
+      <span className="text-muted/80 uppercase tracking-[0.14em] text-[10px]">{label}</span>
     </div>
   )
 }
